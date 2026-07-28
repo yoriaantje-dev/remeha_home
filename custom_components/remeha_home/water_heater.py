@@ -21,19 +21,18 @@ from .coordinator import RemehaHomeUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-# Operation modes exposed to Home Assistant. Use these strings in automations,
-# e.g. service water_heater.set_operation_mode -> operation_mode: comfort
-#   schedule -> follow the DHW time program (alternates comfort/reduced setpoint)
-#   comfort  -> continuous comfort setpoint
-#   boost    -> native ~30 min heat boost, then auto-reverts to schedule
-#   off      -> anti-frost; the appliance reports this as dhwZoneMode "Off"
-MODE_SCHEDULE = "schedule"
-MODE_COMFORT = "comfort"
-MODE_BOOST = "boost"
+# Operation modes exposed to Home Assistant, using the familiar thermostat
+# labels. Use these strings in automations, e.g.
+# service water_heater.set_operation_mode -> operation_mode: heat
+#   auto -> follow the DHW time program (the appliance's schedule)
+#   heat -> continuous comfort setpoint
+#   off  -> anti-frost; the appliance reports this as dhwZoneMode "Off"
+# The native ~30 min boost is exposed separately as a switch (switch platform).
+MODE_AUTO = "auto"
+MODE_HEAT = "heat"
 MODE_OFF = "off"
 
-# boost -> native ~30 min heat boost; the appliance auto-reverts to schedule.
-OPERATION_LIST = [MODE_SCHEDULE, MODE_COMFORT, MODE_BOOST, MODE_OFF]
+OPERATION_LIST = [MODE_AUTO, MODE_HEAT, MODE_OFF]
 
 
 async def async_setup_entry(
@@ -92,30 +91,22 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
 
     @property
     def current_operation(self) -> str | None:
-        """Return the current operation mode.
+        """Return the current operation mode as a thermostat-style label.
 
-        All three dhwZoneMode strings confirmed against live data:
-        "Off" -> off, "Scheduling" -> schedule, "ContinuousComfort" -> comfort.
-        Matched case-insensitively with defensive fallbacks; an unrecognised
-        value falls back to off, which never affects control, only the label.
+        dhwZoneMode strings confirmed against live data:
+        "ContinuousComfort" -> heat, "Scheduling" -> auto, "Off" -> off.
+        "Boost" is transient and auto-reverts to the schedule, so it is shown
+        as auto here; the boost switch tracks the boost itself. Matched
+        case-insensitively; an unrecognised value falls back to off.
         """
         mode = (self._data.get("dhwZoneMode") or "").lower()
-        if mode in ("scheduling", "schedule"):
-            return MODE_SCHEDULE
         if mode in ("continuouscomfort", "continuous-comfort", "comfort"):
-            return MODE_COMFORT
-        if mode == "boost":
-            return MODE_BOOST
+            return MODE_HEAT
+        # boost auto-reverts to schedule -> report auto while it runs
+        if mode in ("scheduling", "schedule", "boost"):
+            return MODE_AUTO
         # "off", "antifrost", "anti-frost", "eco", "frostprotection", ...
         return MODE_OFF
-
-    @property
-    def extra_state_attributes(self) -> dict | None:
-        """Expose the boost auto-end time while a boost is running."""
-        end = self._data.get("boostModeEndTime")
-        if self.current_operation == MODE_BOOST and end:
-            return {"boost_end": end}
-        return None
 
     @property
     def current_temperature(self) -> float | None:
@@ -143,13 +134,11 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
         return ranges.get("comfortSetpointMax", self._data.get("setPointMax", 65.0))
 
     async def async_set_operation_mode(self, operation_mode: str) -> None:
-        """Switch the hot water zone to schedule, comfort or off mode."""
-        if operation_mode == MODE_SCHEDULE:
+        """Switch the hot water zone to auto, heat or off mode."""
+        if operation_mode == MODE_AUTO:
             await self.api.async_set_dhw_schedule(self.hot_water_zone_id)
-        elif operation_mode == MODE_COMFORT:
+        elif operation_mode == MODE_HEAT:
             await self.api.async_set_dhw_comfort(self.hot_water_zone_id)
-        elif operation_mode == MODE_BOOST:
-            await self.api.async_set_dhw_boost(self.hot_water_zone_id)
         elif operation_mode == MODE_OFF:
             await self.api.async_set_dhw_off(self.hot_water_zone_id)
         else:

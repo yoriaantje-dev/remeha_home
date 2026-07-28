@@ -38,6 +38,13 @@ async def async_setup_entry(
                 RemehaHomeFireplaceModeSwitch(api, coordinator, climate_zone_id)
             )
 
+        for hot_water_zone in appliance.get("hotWaterZones", []):
+            entities.append(
+                RemehaHomeDHWBoostSwitch(
+                    api, coordinator, hot_water_zone["hotWaterZoneId"]
+                )
+            )
+
     async_add_entities(entities)
 
 
@@ -117,4 +124,69 @@ class RemehaHomeFireplaceModeSwitch(RemehaHomeSwitch):
         """Turn the entity off."""
         _LOGGER.debug("Disable fireplace mode")
         await self.api.async_set_fireplace_mode(self.climate_zone_id, False)
+        await self.coordinator.async_request_refresh()
+
+
+class RemehaHomeDHWBoostSwitch(CoordinatorEntity, SwitchEntity):
+    """Toggle switch for the domestic hot water boost.
+
+    On activates the native ~30 min boost (POST /modes/boost). The appliance
+    ends the boost automatically after its fixed duration; turning the switch
+    off early returns the zone to its schedule.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Boost"
+    _attr_device_class = SwitchDeviceClass.SWITCH
+
+    def __init__(
+        self,
+        api: RemehaHomeAPI,
+        coordinator: RemehaHomeUpdateCoordinator,
+        hot_water_zone_id: str,
+    ) -> None:
+        """Create a Remeha Home DHW boost switch entity."""
+        super().__init__(coordinator)
+        self.api = api
+        self.hot_water_zone_id = hot_water_zone_id
+        self._attr_unique_id = "_".join([DOMAIN, hot_water_zone_id, "dhw_boost"])
+
+    @property
+    def _data(self):
+        """Return the hot water zone data for this switch."""
+        return self.coordinator.get_by_id(self.hot_water_zone_id)
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info for this device."""
+        return self.coordinator.get_device_info(self.hot_water_zone_id)
+
+    @property
+    def is_on(self) -> bool:
+        """Return whether a boost is currently running."""
+        return (self._data.get("dhwZoneMode") or "").lower() == "boost"
+
+    @property
+    def icon(self) -> str:
+        """Return the icon for this switch."""
+        return "mdi:rocket-launch" if self.is_on else "mdi:rocket-launch-outline"
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        """Expose the boost auto-end time while a boost is running."""
+        end = self._data.get("boostModeEndTime")
+        if self.is_on and end:
+            return {"boost_end": end}
+        return None
+
+    async def async_turn_on(self, **kwargs):
+        """Start a hot water boost."""
+        _LOGGER.debug("Activate DHW boost")
+        await self.api.async_set_dhw_boost(self.hot_water_zone_id)
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_off(self, **kwargs):
+        """Stop the boost by returning the zone to its schedule."""
+        _LOGGER.debug("Cancel DHW boost -> schedule")
+        await self.api.async_set_dhw_schedule(self.hot_water_zone_id)
         await self.coordinator.async_request_refresh()
