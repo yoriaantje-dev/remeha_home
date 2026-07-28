@@ -3,9 +3,11 @@
 > **This is a fork.** All credit for the original integration goes to
 > [@msvisser](https://github.com/msvisser) — see the upstream project at
 > [msvisser/remeha_home](https://github.com/msvisser/remeha_home).
-> This fork adds domestic hot water (DHW) control as a `water_heater` entity
-> (schedule / comfort / **boost** / off, target temperature, and native
-> ~30 min boost). See [DHW hot water control](#dhw-hot-water-control) below.
+> This fork adds domestic hot water (DHW) control: each hot water zone is a
+> `climate` entity (Auto / Heat / Off, target temperature) plus a `switch` for
+> the native ~30 min boost. It is a water heater, not a room thermostat — it is
+> presented through the climate platform only so it shows native mode icons.
+> See [DHW hot water control](#dhw-hot-water-control) below.
 
 This integration lets you control your Remeha Home thermostats from Home Assistant.
 
@@ -29,37 +31,38 @@ You can simply log in using the credentials that you would use in the respective
     - The time at which the next schedule setpoint gets activated
     - The current schedule setpoint
     - Switch to control fireplace mode
-- Each hot water zone is exposed as a [water_heater](https://www.home-assistant.io/integrations/water_heater/) entity (see [DHW hot water control](#dhw-hot-water-control)), plus a sensor:
+- Each hot water zone is exposed as a [climate](https://www.home-assistant.io/integrations/climate/) entity plus a boost [switch](https://www.home-assistant.io/integrations/switch/) (see [DHW hot water control](#dhw-hot-water-control)), alongside a sensor:
     - The water temperature
 - Each appliance (CV-ketel) exposes the following sensors:
     - The water pressure
 
 ## DHW hot water control
-Each hot water zone is exposed as a `water_heater` entity with the following
-operation modes (service `water_heater.set_operation_mode`):
+Each hot water zone is a domestic **hot water heater** — not a room thermostat.
+It is exposed through the `climate` platform only so the UI shows the familiar
+Auto/Heat/Off mode icons; its water-heater identity is kept via a water-boiler
+icon and the DHW device name.
+
+`climate.<zone>` hvac modes (service `climate.set_hvac_mode`):
 
 | Mode | Behaviour |
 | --- | --- |
-| `schedule` | Follow the DHW time program (alternates comfort/reduced periods). |
-| `comfort` | Continuous comfort setpoint. |
-| `boost` | Native ~30 minute heat boost, then the appliance auto-reverts to `schedule`. Duration is fixed by the appliance. |
+| `auto` | Follow the DHW schedule (the appliance's time program). |
+| `heat` | Continuous comfort setpoint. |
 | `off` | Anti-frost only. |
 
-- **Target temperature** (`water_heater.set_temperature`) writes the comfort
-  setpoint. (Reduced-setpoint control is intentionally omitted — the appliance
-  rejects it with HTTP 400.)
-- While a boost is running, the entity exposes a `boost_end` attribute with the
-  UTC time at which the boost auto-ends.
-- The mode icon changes with state: comfort `mdi:fire`, schedule `mdi:calendar`,
-  boost `mdi:rocket-launch`.
+- **Target temperature** (`climate.set_temperature`) writes the comfort setpoint.
+  (Reduced-setpoint control is intentionally omitted — the appliance rejects it
+  with HTTP 400.)
+- **Boost** is a separate `switch.<zone>_boost`: turning it on starts the native
+  ~30 minute boost (fixed, server-controlled duration); turning it off returns
+  the zone to its schedule. While active it exposes a `boost_end` attribute with
+  the UTC auto-end time.
 
 Example — trigger a boost from an automation:
 ```yaml
-service: water_heater.set_operation_mode
+service: switch.turn_on
 target:
-  entity_id: water_heater.dhw
-data:
-  operation_mode: boost
+  entity_id: switch.dhw_boost
 ```
 
 ## Installation

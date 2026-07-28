@@ -1,22 +1,8 @@
 {
   "entity": {
-    "water_heater": {
+    "climate": {
       "dhw": {
-        "state": {
-          "off": "mdi:power",
-          "auto": "mdi:calendar-sync",
-          "heat": "mdi:fire"
-        },
-        "state_attributes": {
-          "operation_mode": {
-            "default": "mdi:water-boiler",
-            "state": {
-              "off": "mdi:power",
-              "auto": "mdi:calendar-sync",
-              "heat": "mdi:fire"
-            }
-          }
-        }
+        "default": "mdi:water-boiler"
       }
     }
   }

@@ -54,6 +54,24 @@ PRESET_MODE_TO_PRESET_INDEX = {
     "clock_program_3": 3,
 }
 
+# Domestic hot water (DHW). dhwZoneMode strings confirmed against live data;
+# matched lower-cased. "Boost" is transient and auto-reverts to the schedule,
+# so it maps to AUTO here (the boost switch tracks the boost itself).
+DHW_MODE_TO_HVAC_MODE = {
+    "continuouscomfort": HVACMode.HEAT,
+    "scheduling": HVACMode.AUTO,
+    "boost": HVACMode.AUTO,
+    "off": HVACMode.OFF,
+}
+
+DHW_STATUS_TO_HVAC_ACTION = {
+    "producingheat": HVACAction.HEATING,
+    "requestingheat": HVACAction.HEATING,
+    "heatdemand": HVACAction.HEATING,
+    "heating": HVACAction.HEATING,
+    "idle": HVACAction.IDLE,
+}
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -69,6 +87,13 @@ async def async_setup_entry(
         for climate_zone in appliance["climateZones"]:
             climate_zone_id = climate_zone["climateZoneId"]
             entities.append(RemehaHomeClimateEntity(api, coordinator, climate_zone_id))
+
+        for hot_water_zone in appliance.get("hotWaterZones", []):
+            entities.append(
+                RemehaHomeDHWClimateEntity(
+                    api, coordinator, hot_water_zone["hotWaterZoneId"]
+                )
+            )
 
     async_add_entities(entities)
 
@@ -233,4 +258,125 @@ class RemehaHomeClimateEntity(CoordinatorEntity, ClimateEntity):
         if previous_hvac_mode != HVACMode.AUTO:
             await self.api.async_set_schedule(self.climate_zone_id, target_preset)
 
+        await self.coordinator.async_request_refresh()
+
+
+class RemehaHomeDHWClimateEntity(CoordinatorEntity, ClimateEntity):
+    """Climate entity representing a Remeha Home domestic hot water (DHW) zone.
+
+    This is a hot water heater, not a room thermostat. It is presented through
+    the climate platform only so the UI shows native Auto/Heat/Off mode icons.
+    Its identity as a water heater is kept via a water-boiler icon (icons.json)
+    and the DHW device/zone name. The native ~30 min boost is a separate switch.
+
+    Modes: auto -> follow the DHW schedule, heat -> continuous comfort setpoint,
+    off -> anti-frost. Only the comfort setpoint is writable (the appliance
+    rejects reduced-setpoint writes with HTTP 400).
+    """
+
+    _enable_turn_on_off_backwards_compatibility = False
+    _attr_supported_features = (
+        ClimateEntityFeature.TARGET_TEMPERATURE
+        | ClimateEntityFeature.TURN_OFF
+        | ClimateEntityFeature.TURN_ON
+    )
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_precision = PRECISION_HALVES
+    _attr_has_entity_name = True
+    _attr_name = None
+    _attr_translation_key = "dhw"
+
+    def __init__(
+        self,
+        api: RemehaHomeAPI,
+        coordinator: RemehaHomeUpdateCoordinator,
+        hot_water_zone_id: str,
+    ) -> None:
+        """Create a Remeha Home DHW climate entity."""
+        super().__init__(coordinator)
+        self.api = api
+        self.coordinator = coordinator
+        self.hot_water_zone_id = hot_water_zone_id
+        self._attr_unique_id = "_".join([DOMAIN, hot_water_zone_id, "climate"])
+
+    @property
+    def _data(self) -> dict:
+        """Return the hot water zone information from the coordinator."""
+        return self.coordinator.get_by_id(self.hot_water_zone_id)
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info for this device."""
+        return self.coordinator.get_device_info(self.hot_water_zone_id)
+
+    @property
+    def _dhw_mode(self) -> str:
+        """Return the lower-cased dhwZoneMode string."""
+        return (self._data.get("dhwZoneMode") or "").lower()
+
+    @property
+    def current_temperature(self) -> float | None:
+        """Return the current hot water temperature (may be null when idle)."""
+        return self._data.get("dhwTemperature")
+
+    @property
+    def hvac_mode(self) -> HVACMode | None:
+        """Return the current hvac mode."""
+        return DHW_MODE_TO_HVAC_MODE.get(self._dhw_mode, HVACMode.OFF)
+
+    @property
+    def hvac_modes(self) -> list[HVACMode]:
+        """Return the list of available hvac modes."""
+        return [HVACMode.OFF, HVACMode.HEAT, HVACMode.AUTO]
+
+    @property
+    def hvac_action(self) -> HVACAction | None:
+        """Return the current hvac action."""
+        if self.hvac_mode == HVACMode.OFF:
+            return HVACAction.OFF
+        return DHW_STATUS_TO_HVAC_ACTION.get(
+            (self._data.get("dhwStatus") or "").lower(), HVACAction.IDLE
+        )
+
+    @property
+    def target_temperature(self) -> float | None:
+        """Return the comfort target temperature (the only writable setpoint)."""
+        if self.hvac_mode == HVACMode.OFF:
+            return None
+        return self._data.get("comfortSetPoint")
+
+    @property
+    def min_temp(self) -> float:
+        """Return the minimum settable comfort temperature."""
+        ranges = self._data.get("setPointRanges") or {}
+        return ranges.get("comfortSetpointMin", self._data.get("setPointMin", 35.0))
+
+    @property
+    def max_temp(self) -> float:
+        """Return the maximum settable comfort temperature."""
+        ranges = self._data.get("setPointRanges") or {}
+        return ranges.get("comfortSetpointMax", self._data.get("setPointMax", 65.0))
+
+    async def async_set_temperature(self, **kwargs: Any) -> None:
+        """Set the comfort target temperature."""
+        temperature = kwargs.get(ATTR_TEMPERATURE)
+        if temperature is None or self.hvac_mode == HVACMode.OFF:
+            return
+        _LOGGER.debug("Setting DHW comfort setpoint to %f", temperature)
+        await self.api.async_set_dhw_comfort_setpoint(
+            self.hot_water_zone_id, temperature
+        )
+        await self.coordinator.async_request_refresh()
+
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        """Set a new hvac mode."""
+        _LOGGER.debug("Setting DHW mode to %s", hvac_mode)
+        if hvac_mode == HVACMode.AUTO:
+            await self.api.async_set_dhw_schedule(self.hot_water_zone_id)
+        elif hvac_mode == HVACMode.HEAT:
+            await self.api.async_set_dhw_comfort(self.hot_water_zone_id)
+        elif hvac_mode == HVACMode.OFF:
+            await self.api.async_set_dhw_off(self.hot_water_zone_id)
+        else:
+            raise NotImplementedError()
         await self.coordinator.async_request_refresh()
