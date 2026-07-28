@@ -145,6 +145,19 @@ class RemehaHomeAPI:
         )
         response.raise_for_status()
 
+    async def async_set_dhw_boost(self, hot_water_zone_id: str):
+        """Activate boost for a hot water zone.
+
+        Sends an empty body to POST /hot-water-zones/{id}/modes/boost. The
+        appliance runs a fixed ~30 minute boost (duration is server-controlled;
+        any duration sent in the body is ignored) and then reverts to schedule.
+        The auto-end time is reported by the dashboard as boostModeEndTime.
+        """
+        response = await self._async_api_request(
+            "POST", f"/hot-water-zones/{hot_water_zone_id}/modes/boost"
+        )
+        response.raise_for_status()
+
     async def async_set_dhw_comfort_setpoint(self, hot_water_zone_id: str, setpoint: float):
         """Set the comfort target temperature for a hot water zone."""
         response = await self._async_api_request(

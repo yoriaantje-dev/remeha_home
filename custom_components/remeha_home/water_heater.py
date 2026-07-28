@@ -25,12 +25,15 @@ _LOGGER = logging.getLogger(__name__)
 # e.g. service water_heater.set_operation_mode -> operation_mode: comfort
 #   schedule -> follow the DHW time program (alternates comfort/reduced setpoint)
 #   comfort  -> continuous comfort setpoint
+#   boost    -> native ~30 min heat boost, then auto-reverts to schedule
 #   off      -> anti-frost; the appliance reports this as dhwZoneMode "Off"
 MODE_SCHEDULE = "schedule"
 MODE_COMFORT = "comfort"
+MODE_BOOST = "boost"
 MODE_OFF = "off"
 
-OPERATION_LIST = [MODE_SCHEDULE, MODE_COMFORT, MODE_OFF]
+# boost -> native ~30 min heat boost; the appliance auto-reverts to schedule.
+OPERATION_LIST = [MODE_SCHEDULE, MODE_COMFORT, MODE_BOOST, MODE_OFF]
 
 
 async def async_setup_entry(
@@ -100,6 +103,8 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
             return MODE_SCHEDULE
         if mode in ("continuouscomfort", "continuous-comfort", "comfort"):
             return MODE_COMFORT
+        if mode == "boost":
+            return MODE_BOOST
         # "off", "antifrost", "anti-frost", "eco", "frostprotection", ...
         return MODE_OFF
 
@@ -110,7 +115,17 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
             return "mdi:fire"
         if self.current_operation == MODE_SCHEDULE:
             return "mdi:calendar"
+        if self.current_operation == MODE_BOOST:
+            return "mdi:rocket-launch"
         # off / anti-frost -> default water_heater icon
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        """Expose the boost auto-end time while a boost is running."""
+        end = self._data.get("boostModeEndTime")
+        if self.current_operation == MODE_BOOST and end:
+            return {"boost_end": end}
         return None
 
     @property
@@ -144,6 +159,8 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
             await self.api.async_set_dhw_schedule(self.hot_water_zone_id)
         elif operation_mode == MODE_COMFORT:
             await self.api.async_set_dhw_comfort(self.hot_water_zone_id)
+        elif operation_mode == MODE_BOOST:
+            await self.api.async_set_dhw_boost(self.hot_water_zone_id)
         elif operation_mode == MODE_OFF:
             await self.api.async_set_dhw_off(self.hot_water_zone_id)
         else:
