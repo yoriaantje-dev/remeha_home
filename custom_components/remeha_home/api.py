@@ -153,14 +153,6 @@ class RemehaHomeAPI:
         )
         response.raise_for_status()
 
-    async def async_set_dhw_reduced_setpoint(self, hot_water_zone_id: str, setpoint: float):
-        """Set the reduced target temperature for a hot water zone."""
-        response = await self._async_api_request(
-            "POST", f"/hot-water-zones/{hot_water_zone_id}/reduced-setpoint",
-            json={"reducedSetpoint": setpoint},
-        )
-        response.raise_for_status()
-
     async def async_get_appliance_technical_information(
         self, appliance_id: str
     ) -> dict:

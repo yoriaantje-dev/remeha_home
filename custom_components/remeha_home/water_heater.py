@@ -104,6 +104,16 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
         return MODE_OFF
 
     @property
+    def icon(self) -> str | None:
+        """Return an icon reflecting the current operation mode."""
+        if self.current_operation == MODE_COMFORT:
+            return "mdi:fire"
+        if self.current_operation == MODE_SCHEDULE:
+            return "mdi:calendar"
+        # off / anti-frost -> default water_heater icon
+        return None
+
+    @property
     def current_temperature(self) -> float | None:
         """Return the current hot water temperature, if the appliance reports it.
 
@@ -113,26 +123,20 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
 
     @property
     def target_temperature(self) -> float | None:
-        """Return the target temperature for the current mode."""
-        if self.current_operation == MODE_COMFORT:
-            return self._data.get("comfortSetPoint")
-        return self._data.get("reducedSetpoint")
+        """Return the comfort target temperature (the only settable setpoint)."""
+        return self._data.get("comfortSetPoint")
 
     @property
     def min_temp(self) -> float:
-        """Return the minimum settable temperature for the current mode."""
+        """Return the minimum settable comfort temperature."""
         ranges = self._data.get("setPointRanges") or {}
-        if self.current_operation == MODE_COMFORT:
-            return ranges.get("comfortSetpointMin", self._data.get("setPointMin", 35.0))
-        return ranges.get("reducedSetpointMin", 10.0)
+        return ranges.get("comfortSetpointMin", self._data.get("setPointMin", 35.0))
 
     @property
     def max_temp(self) -> float:
-        """Return the maximum settable temperature for the current mode."""
+        """Return the maximum settable comfort temperature."""
         ranges = self._data.get("setPointRanges") or {}
-        if self.current_operation == MODE_COMFORT:
-            return ranges.get("comfortSetpointMax", self._data.get("setPointMax", 65.0))
-        return ranges.get("reducedSetpointMax", 60.0)
+        return ranges.get("comfortSetpointMax", self._data.get("setPointMax", 65.0))
 
     async def async_set_operation_mode(self, operation_mode: str) -> None:
         """Switch the hot water zone to schedule, comfort or off mode."""
@@ -147,20 +151,15 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
         await self.coordinator.async_request_refresh()
 
     async def async_set_temperature(self, **kwargs) -> None:
-        """Set the target temperature for the current mode.
+        """Set the comfort target temperature.
 
-        In comfort mode this writes the comfort setpoint; otherwise it writes
-        the reduced setpoint (the schedule's reduced-period target).
+        Only the comfort setpoint is writable; the API rejects reduced-setpoint
+        writes (400) for this appliance, so all temperature changes go to comfort.
         """
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is None:
             return
-        if self.current_operation == MODE_COMFORT:
-            await self.api.async_set_dhw_comfort_setpoint(
-                self.hot_water_zone_id, temperature
-            )
-        else:
-            await self.api.async_set_dhw_reduced_setpoint(
-                self.hot_water_zone_id, temperature
-            )
+        await self.api.async_set_dhw_comfort_setpoint(
+            self.hot_water_zone_id, temperature
+        )
         await self.coordinator.async_request_refresh()
