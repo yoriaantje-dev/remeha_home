@@ -1,0 +1,9 @@
+{
+  "entity": {
+    "climate": {
+      "dhw": {
+        "default": "mdi:water-boiler"
+      }
+    }
+  }
+}

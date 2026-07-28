@@ -1,4 +1,14 @@
 # Remeha Home integration for Home Assistant
+
+> **This is a fork.** All credit for the original integration goes to
+> [@msvisser](https://github.com/msvisser) — see the upstream project at
+> [msvisser/remeha_home](https://github.com/msvisser/remeha_home).
+> This fork adds domestic hot water (DHW) control: each hot water zone is a
+> `climate` entity (Auto / Heat / Off, target temperature) plus a `switch` for
+> the native ~30 min boost. It is a water heater, not a room thermostat — it is
+> presented through the climate platform only so it shows native mode icons.
+> See [DHW hot water control](#dhw-hot-water-control) below.
+
 This integration lets you control your Remeha Home thermostats from Home Assistant.
 
 **Before using this integration, make sure you have set up your thermostat in the [Remeha Home](https://play.google.com/store/apps/details?id=com.bdrthermea.application.remeha) app.**
@@ -21,18 +31,57 @@ You can simply log in using the credentials that you would use in the respective
     - The time at which the next schedule setpoint gets activated
     - The current schedule setpoint
     - Switch to control fireplace mode
-- Each hot water zone exposes the following sensors:
+- Each hot water zone is exposed as a [climate](https://www.home-assistant.io/integrations/climate/) entity plus a boost [switch](https://www.home-assistant.io/integrations/switch/) (see [DHW hot water control](#dhw-hot-water-control)), alongside a sensor:
     - The water temperature
 - Each appliance (CV-ketel) exposes the following sensors:
     - The water pressure
 
+## DHW hot water control
+Each hot water zone is a domestic **hot water heater** — not a room thermostat.
+It is exposed through the `climate` platform only so the UI shows the familiar
+Auto/Heat/Off mode icons; its water-heater identity is kept via a water-boiler
+icon and the DHW device name.
+
+`climate.<zone>` hvac modes (service `climate.set_hvac_mode`):
+
+| Mode | Behaviour |
+| --- | --- |
+| `auto` | Follow the DHW schedule (the appliance's time program). |
+| `heat` | Continuous comfort setpoint. |
+| `off` | Anti-frost only. |
+
+- **Target temperature** (`climate.set_temperature`) writes the comfort setpoint.
+  (Reduced-setpoint control is intentionally omitted — the appliance rejects it
+  with HTTP 400.)
+- **Boost** is a separate `switch.<zone>_boost`: turning it on starts the native
+  ~30 minute boost (fixed, server-controlled duration); turning it off returns
+  the zone to its schedule. While active it exposes a `boost_end` attribute with
+  the UTC auto-end time.
+
+Example — trigger a boost from an automation:
+```yaml
+service: switch.turn_on
+target:
+  entity_id: switch.dhw_boost
+```
+
 ## Installation
 
-### Install with HACS (recommended)
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=msvisser&repository=remeha_home&category=integration)
+### Install this fork with HACS (DHW support)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=yoriaantje-dev&repository=remeha_home&category=integration)
 
 Do you have [HACS](https://hacs.xyz/) installed?
-Click the button or follow the instructions.
+Click the button above (it adds this fork as a custom repository), or add it manually:
+1. HACS → Integrations → three-dot menu → **Custom repositories**
+1. Repository: `https://github.com/yoriaantje-dev/remeha_home`, category **Integration**
+1. Search integrations for **Remeha Home** and click `Download`
+1. Restart Home Assistant
+1. See [Setup](#setup)
+
+### Install the original (upstream) with HACS
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=msvisser&repository=remeha_home&category=integration)
+
+The original integration by [@msvisser](https://github.com/msvisser) (without DHW control):
 1. Search integrations for **Remeha Home**
 1. Click `Install`
 1. Restart Home Assistant
