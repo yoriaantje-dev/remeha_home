@@ -124,6 +124,43 @@ class RemehaHomeAPI:
         )
         response.raise_for_status()
 
+    async def async_set_dhw_schedule(self, hot_water_zone_id: str):
+        """Set a hot water zone to schedule mode."""
+        response = await self._async_api_request(
+            "POST", f"/hot-water-zones/{hot_water_zone_id}/modes/schedule"
+        )
+        response.raise_for_status()
+
+    async def async_set_dhw_comfort(self, hot_water_zone_id: str):
+        """Set a hot water zone to continuous comfort mode."""
+        response = await self._async_api_request(
+            "POST", f"/hot-water-zones/{hot_water_zone_id}/modes/continuous-comfort"
+        )
+        response.raise_for_status()
+
+    async def async_set_dhw_off(self, hot_water_zone_id: str):
+        """Set a hot water zone to off (anti-frost) mode."""
+        response = await self._async_api_request(
+            "POST", f"/hot-water-zones/{hot_water_zone_id}/modes/anti-frost"
+        )
+        response.raise_for_status()
+
+    async def async_set_dhw_comfort_setpoint(self, hot_water_zone_id: str, setpoint: float):
+        """Set the comfort target temperature for a hot water zone."""
+        response = await self._async_api_request(
+            "POST", f"/hot-water-zones/{hot_water_zone_id}/comfort-setpoint",
+            json={"comfortSetpoint": setpoint},
+        )
+        response.raise_for_status()
+
+    async def async_set_dhw_reduced_setpoint(self, hot_water_zone_id: str, setpoint: float):
+        """Set the reduced target temperature for a hot water zone."""
+        response = await self._async_api_request(
+            "POST", f"/hot-water-zones/{hot_water_zone_id}/reduced-setpoint",
+            json={"reducedSetpoint": setpoint},
+        )
+        response.raise_for_status()
+
     async def async_get_appliance_technical_information(
         self, appliance_id: str
     ) -> dict:
