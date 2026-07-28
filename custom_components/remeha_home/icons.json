@@ -1,0 +1,25 @@
+{
+  "entity": {
+    "water_heater": {
+      "dhw": {
+        "state": {
+          "off": "mdi:snowflake",
+          "schedule": "mdi:calendar",
+          "comfort": "mdi:fire",
+          "boost": "mdi:rocket-launch"
+        },
+        "state_attributes": {
+          "operation_mode": {
+            "default": "mdi:water-boiler",
+            "state": {
+              "off": "mdi:snowflake",
+              "schedule": "mdi:calendar",
+              "comfort": "mdi:fire",
+              "boost": "mdi:rocket-launch"
+            }
+          }
+        }
+      }
+    }
+  }
+}

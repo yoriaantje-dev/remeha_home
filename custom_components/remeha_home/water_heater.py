@@ -60,6 +60,7 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
 
     _attr_has_entity_name = True
     _attr_name = None  # take the device (zone) name, e.g. "DHW"
+    _attr_translation_key = "dhw"  # icon translations live in icons.json
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_operation_list = OPERATION_LIST
     _attr_supported_features = (
@@ -107,18 +108,6 @@ class RemehaHomeWaterHeater(CoordinatorEntity, WaterHeaterEntity):
             return MODE_BOOST
         # "off", "antifrost", "anti-frost", "eco", "frostprotection", ...
         return MODE_OFF
-
-    @property
-    def icon(self) -> str | None:
-        """Return an icon reflecting the current operation mode."""
-        if self.current_operation == MODE_COMFORT:
-            return "mdi:fire"
-        if self.current_operation == MODE_SCHEDULE:
-            return "mdi:calendar"
-        if self.current_operation == MODE_BOOST:
-            return "mdi:rocket-launch"
-        # off / anti-frost -> default water_heater icon
-        return None
 
     @property
     def extra_state_attributes(self) -> dict | None:
